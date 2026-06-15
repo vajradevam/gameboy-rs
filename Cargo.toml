@@ -1,0 +1,13 @@
+[package]
+name = "gameboy"
+version = "0.1.0"
+edition = "2021"
+description = "A Game Boy (DMG) emulator"
+
+[lib]
+name = "gameboy"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gameboy"
+path = "src/bin/gameboy.rs"
