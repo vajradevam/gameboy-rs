@@ -1,0 +1,176 @@
+//! Unit tests for the CPU, memory map and frame loop.
+
+use crate::Emulator;
+use crate::constants::{FLAG_C, FLAG_H, FLAG_N, FLAG_Z, TARGET_CYCLES};
+
+fn with_program(program: &[u8]) -> Emulator {
+    let mut emulator = Emulator::new();
+    emulator.rom[0x100..0x100 + program.len()].copy_from_slice(program);
+    emulator.pc = 0x100;
+    emulator.sp = 0xFFFE;
+    emulator
+}
+
+fn step(emulator: &mut Emulator) {
+    emulator.execute_next_opcode();
+}
+
+#[test]
+fn nop_advances_four_cycles() {
+    let mut emu = with_program(&[0x00]);
+    step(&mut emu);
+    assert_eq!(emu.program_counter(), 0x101);
+    assert_eq!(emu.cycles_this_update, 4);
+    assert_eq!(emu.total_opcodes(), 1);
+}
+
+#[test]
+fn immediate_loads_and_register_moves() {
+    let mut emu = with_program(&[0x3E, 0x42, 0x47]);
+    step(&mut emu);
+    step(&mut emu);
+    assert_eq!(emu.registers().0 >> 8, 0x42);
+    assert_eq!(emu.registers().1 >> 8, 0x42);
+    assert_eq!(emu.program_counter(), 0x103);
+    assert_eq!(emu.cycles_this_update, 12);
+}
+
+#[test]
+fn add_sets_half_carry() {
+    let mut emu = with_program(&[0x3E, 0x0F, 0xC6, 0x01]);
+    step(&mut emu);
+    step(&mut emu);
+    assert_eq!(emu.registers().0 >> 8, 0x10);
+    assert!(emu.half_carry_flag());
+    assert!(!emu.zero_flag());
+    assert!(!emu.carry_flag());
+    assert_eq!(emu.cycles_this_update, 16);
+}
+
+#[test]
+fn subtraction_sets_carry_and_half_carry() {
+    let mut emu = with_program(&[0x3E, 0x00, 0xD6, 0x01]);
+    step(&mut emu);
+    step(&mut emu);
+    assert_eq!(emu.registers().0 >> 8, 0xFF);
+    assert!(emu.carry_flag());
+    assert!(emu.half_carry_flag());
+    assert!(emu.subtract_flag());
+}
+
+#[test]
+fn increment_wraps_and_sets_zero() {
+    let mut emu = with_program(&[0x3C]);
+    emu.a = 0xFF;
+    step(&mut emu);
+    assert_eq!(emu.a, 0);
+    assert!(emu.zero_flag());
+    assert!(emu.half_carry_flag());
+    assert!(!emu.subtract_flag());
+}
+
+#[test]
+fn absolute_and_relative_jumps() {
+    let mut emu = with_program(&[0xC3, 0x50, 0x00]);
+    step(&mut emu);
+    assert_eq!(emu.program_counter(), 0x50);
+    assert_eq!(emu.cycles_this_update, 12);
+
+    let mut emu = with_program(&[0x18, 0xFE]);
+    step(&mut emu);
+    assert_eq!(emu.program_counter(), 0x100);
+    assert_eq!(emu.cycles_this_update, 8);
+}
+
+#[test]
+fn call_pushes_return_address_and_ret_restores_it() {
+    let mut emu = with_program(&[0xCD, 0x10, 0x01]);
+    emu.rom[0x110] = 0xC9;
+    step(&mut emu);
+    assert_eq!(emu.program_counter(), 0x110);
+    assert_eq!(emu.sp, 0xFFFC);
+    assert_eq!(emu.read_memory(0xFFFC), 0x03);
+    assert_eq!(emu.read_memory(0xFFFD), 0x01);
+
+    step(&mut emu);
+    assert_eq!(emu.program_counter(), 0x103);
+    assert_eq!(emu.sp, 0xFFFE);
+}
+
+#[test]
+fn extended_rlc_rotates_through_carry() {
+    let mut emu = with_program(&[0xCB, 0x00]);
+    emu.b = 0x80;
+    step(&mut emu);
+    assert_eq!(emu.b, 0x01);
+    assert!(emu.carry_flag());
+    assert!(!emu.zero_flag());
+    assert_eq!(emu.cycles_this_update, 8);
+}
+
+#[test]
+fn extended_bit_sets_zero_when_clear() {
+    let mut emu = with_program(&[0xCB, 0x40]);
+    emu.b = 0x01;
+    step(&mut emu);
+    assert!(!emu.zero_flag());
+    assert!(emu.half_carry_flag());
+    assert!(!emu.subtract_flag());
+    assert_eq!(emu.cycles_this_update, 8);
+
+    let mut emu = with_program(&[0xCB, 0x41]);
+    emu.b = 0x01;
+    step(&mut emu);
+    assert!(emu.zero_flag());
+}
+
+#[test]
+fn mbc1_bank_switch_and_rom_read() {
+    let mut emu = with_program(&[]);
+    emu.using_mbc1 = true;
+    emu.write_byte(0x2000, 5);
+    assert_eq!(emu.current_rom_bank, 5);
+    emu.game_bank[5 * 0x4000] = 0xAB;
+    assert_eq!(emu.read_memory(0x4000), 0xAB);
+}
+
+#[test]
+fn echo_ram_and_dma_transfer() {
+    let mut emu = with_program(&[]);
+    emu.write_byte(0xE000, 0x5A);
+    assert_eq!(emu.rom[0xE000], 0x5A);
+    assert_eq!(emu.rom[0xC000], 0x5A);
+
+    emu.rom[0xC123] = 0xAB;
+    emu.write_byte(0xFF46, 0xC1);
+    assert_eq!(emu.rom[0xFE00 + 0x23], 0xAB);
+}
+
+#[test]
+fn daa_adjusts_after_addition() {
+    let mut emu = with_program(&[0x27]);
+    emu.a = 0x9A;
+    step(&mut emu);
+    assert_eq!(emu.a, 0x00);
+    assert!(emu.zero_flag());
+}
+
+#[test]
+fn update_runs_a_full_frame() {
+    // An endless JP 0x100 keeps the CPU busy for the whole frame.
+    let mut emu = with_program(&[0xC3, 0x00, 0x01]);
+    emu.update();
+    assert!(emu.total_opcodes() > 0);
+    assert!(emu.cycles_this_update >= TARGET_CYCLES);
+    assert_eq!(emu.program_counter(), 0x100);
+}
+
+#[test]
+fn flags_are_publicly_observable() {
+    let mut emu = Emulator::new();
+    emu.f = FLAG_Z | FLAG_N | FLAG_H | FLAG_C;
+    assert!(emu.zero_flag());
+    assert!(emu.subtract_flag());
+    assert!(emu.half_carry_flag());
+    assert!(emu.carry_flag());
+}
