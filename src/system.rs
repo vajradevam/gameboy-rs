@@ -4,6 +4,7 @@ use crate::Emulator;
 use crate::constants::{RETRACE_START, VERTICAL_BLANK_SCAN_LINE};
 
 impl Emulator {
+    #[inline]
     pub(crate) fn do_input(&mut self) {}
 
     pub(crate) fn do_timers(&mut self, cycles: u32) {
@@ -34,17 +35,16 @@ impl Emulator {
             return;
         }
 
-        let request_flag = self.read_memory(0xFF0F);
+        let request_flag = self.rom[0xFF0F];
         if request_flag == 0 {
             return;
         }
 
+        let enabled = self.rom[0xFFFF];
         for bit in 0..8u8 {
-            if request_flag & (1 << bit) != 0 {
-                let enabled = self.read_memory(0xFFFF);
-                if enabled & (1 << bit) != 0 {
-                    self.service_interrupt(bit);
-                }
+            let mask = 1 << bit;
+            if request_flag & mask != 0 && enabled & mask != 0 {
+                self.service_interrupt(bit);
             }
         }
     }
@@ -60,20 +60,21 @@ impl Emulator {
             _ => return,
         };
         self.enable_interrupts = false;
-        let flag = self.read_memory(0xFF0F) & !(1 << number);
-        self.write_byte(0xFF0F, flag);
+        self.rom[0xFF0F] &= !(1 << number);
     }
 
+    #[inline]
     pub(crate) fn request_interrupt(&mut self, bit: u8) {
-        let request_flag = self.read_memory(0xFF0F) | (1 << bit);
-        self.write_byte(0xFF0F, request_flag);
+        self.rom[0xFF0F] |= 1 << bit;
     }
 
+    #[inline]
     pub(crate) fn issue_vertical_blank(&mut self) {
         self.request_interrupt(0);
     }
 
     /// The joypad register is driven by the direction/button select lines.
+    #[inline]
     pub(crate) fn get_joypad_state(&self) -> u8 {
         let mut result = self.rom[0xFF00] ^ 0xFF;
         if result & (1 << 4) == 0 {
@@ -103,10 +104,12 @@ impl Emulator {
         }
     }
 
+    #[inline]
     pub(crate) fn on_key_released(&mut self, key: u32) {
         self.joypad_state |= 1 << key;
     }
 
+    #[inline]
     pub(crate) fn get_lcd_mode(&self) -> u8 {
         self.rom[0xFF41] & 0x3
     }
@@ -114,16 +117,16 @@ impl Emulator {
     pub(crate) fn set_lcd_status(&mut self) {
         let mut lcd_status = self.rom[0xFF41];
 
-        if self.read_memory(0xFF40) & 0x80 == 0 {
+        if self.rom[0xFF40] & 0x80 == 0 {
             self.retrace_ly = RETRACE_START;
             self.rom[0xFF44] = 0;
             lcd_status &= 0xFC;
             lcd_status |= 1;
-            self.write_byte(0xFF41, lcd_status);
+            self.rom[0xFF41] = lcd_status;
             return;
         }
 
-        let ly = self.read_memory(0xFF44);
+        let ly = self.rom[0xFF44];
         let current_mode = self.get_lcd_mode();
         let mode: u8;
         let mut request_interrupt = false;
@@ -153,11 +156,12 @@ impl Emulator {
                 request_interrupt = lcd_status & (1 << 3) != 0;
             }
         }
+
         if request_interrupt && current_mode != mode {
             self.request_interrupt(1);
         }
 
-        if ly == self.read_memory(0xFF45) {
+        if ly == self.rom[0xFF45] {
             lcd_status |= 4;
             if lcd_status & (1 << 6) != 0 {
                 self.request_interrupt(1);
@@ -166,6 +170,6 @@ impl Emulator {
             lcd_status &= !4;
         }
 
-        self.write_byte(0xFF41, lcd_status);
+        self.rom[0xFF41] = lcd_status;
     }
 }

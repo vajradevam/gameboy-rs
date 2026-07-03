@@ -38,42 +38,51 @@ enum Unary {
 impl Emulator {
     // ---- register access -------------------------------------------------
 
+    #[inline]
     pub(crate) fn get_af(&self) -> u16 {
         ((self.a as u16) << 8) | self.f as u16
     }
 
+    #[inline]
     pub(crate) fn set_af(&mut self, value: u16) {
         self.a = (value >> 8) as u8;
         self.f = value as u8;
     }
 
+    #[inline]
     pub(crate) fn get_bc(&self) -> u16 {
         ((self.b as u16) << 8) | self.c as u16
     }
 
+    #[inline]
     pub(crate) fn set_bc(&mut self, value: u16) {
         self.b = (value >> 8) as u8;
         self.c = value as u8;
     }
 
+    #[inline]
     pub(crate) fn get_de(&self) -> u16 {
         ((self.d as u16) << 8) | self.e as u16
     }
 
+    #[inline]
     pub(crate) fn set_de(&mut self, value: u16) {
         self.d = (value >> 8) as u8;
         self.e = value as u8;
     }
 
+    #[inline]
     pub(crate) fn get_hl(&self) -> u16 {
         ((self.h as u16) << 8) | self.l as u16
     }
 
+    #[inline]
     pub(crate) fn set_hl(&mut self, value: u16) {
         self.h = (value >> 8) as u8;
         self.l = value as u8;
     }
 
+    #[inline]
     fn get8(&self, reg: Reg8) -> u8 {
         match reg {
             Reg8::A => self.a,
@@ -86,6 +95,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn set8(&mut self, reg: Reg8, value: u8) {
         match reg {
             Reg8::A => self.a = value,
@@ -98,6 +108,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn get16(&self, reg: Reg16) -> u16 {
         match reg {
             Reg16::Af => self.get_af(),
@@ -108,6 +119,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn set16(&mut self, reg: Reg16, value: u16) {
         match reg {
             Reg16::Af => self.set_af(value),
@@ -118,6 +130,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn reg_from_z(z: u8) -> Reg8 {
         match z {
             0 => Reg8::B,
@@ -131,54 +144,63 @@ impl Emulator {
         }
     }
 
+    #[inline]
     pub(crate) fn flag(&self, bit: u8) -> bool {
         self.f & (1 << bit) != 0
     }
 
     // ---- instruction helpers --------------------------------------------
 
+    #[inline]
     fn check_zero(&mut self, value: u8) {
         if value == 0 {
             self.f |= FLAG_Z;
         }
     }
 
+    #[inline]
     fn load_immediate(&mut self, dst: Reg8) {
         let value = self.immediate_byte();
         self.set8(dst, value);
         self.cycles_this_update += 8;
     }
 
+    #[inline]
     fn move_reg(&mut self, dst: Reg8, src: Reg8) {
         let value = self.get8(src);
         self.set8(dst, value);
         self.cycles_this_update += 4;
     }
 
+    #[inline]
     fn load_hl(&mut self, dst: Reg8) {
         let value = self.read_memory(self.get_hl());
         self.set8(dst, value);
         self.cycles_this_update += 8;
     }
 
+    #[inline]
     fn load_address(&mut self, dst: Reg8, address: u16) {
         let value = self.read_memory(address);
         self.set8(dst, value);
         self.cycles_this_update += 8;
     }
 
+    #[inline]
     fn store_hl(&mut self, src: Reg8) {
         let value = self.get8(src);
         self.write_byte(self.get_hl(), value);
         self.cycles_this_update += 8;
     }
 
+    #[inline]
     fn store_address(&mut self, address: u16, src: Reg8) {
         let value = self.get8(src);
         self.write_byte(address, value);
         self.cycles_this_update += 8;
     }
 
+    #[inline]
     fn load16(&mut self, dst: Reg16) {
         let value = self.read_word();
         self.pc = self.pc.wrapping_add(2);
@@ -186,18 +208,21 @@ impl Emulator {
         self.cycles_this_update += 12;
     }
 
+    #[inline]
     fn push(&mut self, reg: Reg16) {
         let value = self.get16(reg);
         self.push_word_onto_stack(value);
         self.cycles_this_update += 16;
     }
 
+    #[inline]
     fn pop(&mut self, reg: Reg16) {
         let value = self.pop_word_off_stack();
         self.set16(reg, value);
         self.cycles_this_update += 12;
     }
 
+    #[inline]
     fn alu_add(&mut self, value: u8, add_carry: bool, cycles: u32) {
         self.cycles_this_update += cycles;
         let before = self.a;
@@ -219,6 +244,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn alu_sub(&mut self, value: u8, sub_carry: bool, cycles: u32) {
         self.cycles_this_update += cycles;
         let before = self.a;
@@ -241,6 +267,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn alu_and(&mut self, value: u8, cycles: u32) {
         self.cycles_this_update += cycles;
         self.a &= value;
@@ -249,6 +276,7 @@ impl Emulator {
         self.f |= FLAG_H;
     }
 
+    #[inline]
     fn alu_or(&mut self, value: u8, cycles: u32) {
         self.cycles_this_update += cycles;
         self.a |= value;
@@ -256,6 +284,7 @@ impl Emulator {
         self.check_zero(self.a);
     }
 
+    #[inline]
     fn alu_xor(&mut self, value: u8, cycles: u32) {
         self.cycles_this_update += cycles;
         self.a ^= value;
@@ -263,6 +292,7 @@ impl Emulator {
         self.check_zero(self.a);
     }
 
+    #[inline]
     fn alu_cp(&mut self, value: u8, cycles: u32) {
         self.cycles_this_update += cycles;
         let before = self.a;
@@ -279,6 +309,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn inc_reg8(&mut self, reg: Reg8, cycles: u32) {
         self.cycles_this_update += cycles;
         let before = self.get8(reg);
@@ -298,6 +329,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn dec_reg8(&mut self, reg: Reg8, cycles: u32) {
         self.cycles_this_update += cycles;
         let before = self.get8(reg);
@@ -317,6 +349,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn inc_hl(&mut self, cycles: u32) {
         self.cycles_this_update += cycles;
         let address = self.get_hl();
@@ -337,6 +370,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn dec_hl(&mut self, cycles: u32) {
         self.cycles_this_update += cycles;
         let address = self.get_hl();
@@ -357,6 +391,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn add_hl16(&mut self, value: u16, cycles: u32) {
         self.cycles_this_update += cycles;
         let before = self.get_hl();
@@ -378,18 +413,21 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn inc16(&mut self, reg: Reg16, cycles: u32) {
         self.cycles_this_update += cycles;
         let value = self.get16(reg);
         self.set16(reg, value.wrapping_add(1));
     }
 
+    #[inline]
     fn dec16(&mut self, reg: Reg16, cycles: u32) {
         self.cycles_this_update += cycles;
         let value = self.get16(reg);
         self.set16(reg, value.wrapping_sub(1));
     }
 
+    #[inline]
     fn jump_absolute(&mut self) {
         self.cycles_this_update += 12;
         let target = self.read_word();
@@ -397,6 +435,7 @@ impl Emulator {
         self.pc = target;
     }
 
+    #[inline]
     fn jump_conditional(&mut self, bit: u8, condition: bool) {
         self.cycles_this_update += 12;
         let target = self.read_word();
@@ -406,6 +445,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn jump_relative(&mut self, bit: Option<u8>, condition: bool) {
         self.cycles_this_update += 8;
         let offset = self.read_memory(self.pc) as i8 as u16;
@@ -417,6 +457,7 @@ impl Emulator {
         self.pc = self.pc.wrapping_add(1);
     }
 
+    #[inline]
     fn call(&mut self, bit: Option<u8>, condition: bool) {
         self.cycles_this_update += 12;
         let target = self.read_word();
@@ -428,6 +469,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn ret(&mut self, bit: Option<u8>, condition: bool) {
         self.cycles_this_update += 8;
         if bit.map_or(true, |b| self.flag(b) == condition) {
@@ -435,6 +477,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     fn restart(&mut self, target: u8) {
         let address = self.pc;
         self.push_word_onto_stack(address);
@@ -442,6 +485,7 @@ impl Emulator {
         self.pc = target as u16;
     }
 
+    #[inline]
     fn unary_value(&mut self, value: u8, op: Unary) -> u8 {
         let mut result = value;
         match op {
@@ -531,6 +575,7 @@ impl Emulator {
         result
     }
 
+    #[inline]
     fn unary_reg(&mut self, reg: Reg8, op: Unary, cycles: u32) {
         self.cycles_this_update += cycles;
         let value = self.get8(reg);
@@ -538,6 +583,7 @@ impl Emulator {
         self.set8(reg, result);
     }
 
+    #[inline]
     fn unary_hl(&mut self, op: Unary, cycles: u32) {
         self.cycles_this_update += cycles;
         let address = self.get_hl();
@@ -546,6 +592,7 @@ impl Emulator {
         self.write_byte(address, result);
     }
 
+    #[inline]
     fn test_bit_value(&mut self, value: u8, bit: u8, cycles: u32) {
         self.cycles_this_update += cycles;
         if value & (1 << bit) != 0 {
@@ -557,22 +604,26 @@ impl Emulator {
         self.f |= FLAG_H;
     }
 
+    #[inline]
     fn test_bit_reg(&mut self, reg: Reg8, bit: u8, cycles: u32) {
         let value = self.get8(reg);
         self.test_bit_value(value, bit, cycles);
     }
 
+    #[inline]
     fn test_bit_hl(&mut self, bit: u8) {
         let value = self.read_memory(self.get_hl());
         self.test_bit_value(value, bit, 16);
     }
 
+    #[inline]
     fn reset_bit_reg(&mut self, reg: Reg8, bit: u8) {
         let value = self.get8(reg) & !(1 << bit);
         self.set8(reg, value);
         self.cycles_this_update += 8;
     }
 
+    #[inline]
     fn reset_bit_hl(&mut self, bit: u8) {
         let address = self.get_hl();
         let value = self.read_memory(address) & !(1 << bit);
@@ -580,12 +631,14 @@ impl Emulator {
         self.cycles_this_update += 16;
     }
 
+    #[inline]
     fn set_bit_reg(&mut self, reg: Reg8, bit: u8) {
         let value = self.get8(reg) | (1 << bit);
         self.set8(reg, value);
         self.cycles_this_update += 8;
     }
 
+    #[inline]
     fn set_bit_hl(&mut self, bit: u8) {
         let address = self.get_hl();
         let value = self.read_memory(address) | (1 << bit);
@@ -593,6 +646,7 @@ impl Emulator {
         self.cycles_this_update += 16;
     }
 
+    #[inline]
     fn daa(&mut self) {
         self.cycles_this_update += 4;
         if self.flag(FLAG_N_BIT) {
@@ -629,6 +683,7 @@ impl Emulator {
 
     // ---- opcode dispatch -------------------------------------------------
 
+    #[inline]
     pub(crate) fn execute_next_opcode(&mut self) -> u8 {
         let pc = self.pc;
         let mut opcode = self.rom[pc as usize];
@@ -661,6 +716,7 @@ impl Emulator {
         opcode
     }
 
+    #[inline]
     pub(crate) fn execute_opcode(&mut self, opcode: u8) {
         match opcode {
             0x00 => self.cycles_this_update += 4,
@@ -1332,6 +1388,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     pub(crate) fn execute_extended_opcode(&mut self) {
         let pc = self.pc;
         let mut opcode = self.rom[pc as usize];

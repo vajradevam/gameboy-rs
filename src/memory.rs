@@ -5,6 +5,7 @@ use crate::constants::RETRACE_START;
 
 impl Emulator {
     /// All ROM reads funnel through here so banked regions can be trapped.
+    #[inline]
     pub(crate) fn read_memory(&self, address: u16) -> u8 {
         match address {
             0x4000..=0x7FFF => {
@@ -21,6 +22,7 @@ impl Emulator {
     }
 
     /// Write a byte to the bus. Addresses below 0x8000 are cartridge registers.
+    #[inline]
     pub(crate) fn write_byte(&mut self, address: u16, data: u8) {
         match address {
             0x0000..=0x1FFF => {
@@ -127,6 +129,7 @@ impl Emulator {
     }
 
     /// Little-endian word at the current program counter.
+    #[inline]
     pub(crate) fn read_word(&self) -> u16 {
         let low = self.read_memory(self.pc) as u16;
         let high = self.read_memory(self.pc.wrapping_add(1)) as u16;
@@ -134,12 +137,14 @@ impl Emulator {
     }
 
     /// Read the immediate byte at the program counter and advance past it.
+    #[inline]
     pub(crate) fn immediate_byte(&mut self) -> u8 {
         let value = self.read_memory(self.pc);
         self.pc = self.pc.wrapping_add(1);
         value
     }
 
+    #[inline]
     pub(crate) fn push_word_onto_stack(&mut self, word: u16) {
         let high = (word >> 8) as u8;
         let low = word as u8;
@@ -149,6 +154,7 @@ impl Emulator {
         self.write_byte(self.sp, low);
     }
 
+    #[inline]
     pub(crate) fn pop_word_off_stack(&mut self) -> u16 {
         let low = self.read_memory(self.sp) as u16;
         let high = self.read_memory(self.sp.wrapping_add(1)) as u16;
@@ -156,6 +162,7 @@ impl Emulator {
         (high << 8) | low
     }
 
+    #[inline]
     pub(crate) fn reset_screen(&mut self) {
         for row in self.screen.iter_mut() {
             for pixel in row.iter_mut() {
@@ -164,6 +171,7 @@ impl Emulator {
         }
     }
 
+    #[inline]
     pub(crate) fn create_ram_banks(&mut self, _num_banks: usize) {
         // The hardware supports up to 16 switchable banks; bank zero is
         // initialised from the cartridge header area.
@@ -171,6 +179,7 @@ impl Emulator {
         self.ram_banks[0].copy_from_slice(&self.rom[0xA000..0xC000]);
     }
 
+    #[inline]
     pub(crate) fn reset_cpu(&mut self) -> bool {
         self.reset_screen();
         self.current_ram_bank = 0;
