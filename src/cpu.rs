@@ -46,7 +46,8 @@ impl Emulator {
     #[inline]
     pub(crate) fn set_af(&mut self, value: u16) {
         self.a = (value >> 8) as u8;
-        self.f = value as u8;
+        // The low nibble of F is hard-wired to zero on the hardware.
+        self.f = value as u8 & 0xF0;
     }
 
     #[inline]
@@ -226,20 +227,21 @@ impl Emulator {
     fn alu_add(&mut self, value: u8, add_carry: bool, cycles: u32) {
         self.cycles_this_update += cycles;
         let before = self.a;
-        let mut adding = value;
-        if add_carry && self.flag(FLAG_C_BIT) {
-            adding = adding.wrapping_add(1);
-        }
+        let carry = if add_carry && self.flag(FLAG_C_BIT) {
+            1u16
+        } else {
+            0
+        };
+        let total = before as u16 + value as u16 + carry;
 
-        self.a = before.wrapping_add(adding);
+        self.a = total as u8;
         self.f = 0;
         self.check_zero(self.a);
 
-        let half = (before & 0xF).wrapping_add(adding & 0xF);
-        if half > 0xF {
+        if (before & 0xF) as u16 + (value & 0xF) as u16 + carry > 0xF {
             self.f |= FLAG_H;
         }
-        if before as u16 + adding as u16 > 0xFF {
+        if total > 0xFF {
             self.f |= FLAG_C;
         }
     }
@@ -248,21 +250,22 @@ impl Emulator {
     fn alu_sub(&mut self, value: u8, sub_carry: bool, cycles: u32) {
         self.cycles_this_update += cycles;
         let before = self.a;
-        let mut subtracting = value;
-        if sub_carry && self.flag(FLAG_C_BIT) {
-            subtracting = subtracting.wrapping_add(1);
-        }
+        let carry = if sub_carry && self.flag(FLAG_C_BIT) {
+            1i32
+        } else {
+            0
+        };
+        let total = before as i32 - value as i32 - carry;
 
-        self.a = before.wrapping_sub(subtracting);
+        self.a = total as u8;
         self.f = 0;
         self.check_zero(self.a);
         self.f |= FLAG_N;
 
-        if before < subtracting {
+        if total < 0 {
             self.f |= FLAG_C;
         }
-        let half = (before as i16 & 0xF) - (subtracting as i16 & 0xF);
-        if half < 0 {
+        if (before as i32 & 0xF) - (value as i32 & 0xF) - carry < 0 {
             self.f |= FLAG_H;
         }
     }
@@ -404,9 +407,8 @@ impl Emulator {
             self.f &= !FLAG_C;
         }
 
-        // Kept for parity with the original flag calculation.
-        let half = ((before & 0xFF00) & 0xF) + ((value >> 8) & 0xF);
-        if half != 0 {
+        // Half carry is a carry out of bit 11.
+        if (before & 0x0FFF) + (value & 0x0FFF) > 0x0FFF {
             self.f |= FLAG_H;
         } else {
             self.f &= !FLAG_H;
@@ -486,7 +488,7 @@ impl Emulator {
     }
 
     #[inline]
-    fn unary_value(&mut self, value: u8, op: Unary) -> u8 {
+    fn unary_value(&mut self, value: u8, op: Unary, set_zero: bool) -> u8 {
         let mut result = value;
         match op {
             Unary::Rlc => {
@@ -497,7 +499,9 @@ impl Emulator {
                     self.f |= FLAG_C;
                     result |= 1;
                 }
-                self.check_zero(result);
+                if set_zero {
+                    self.check_zero(result);
+                }
             }
             Unary::Rrc => {
                 let lsb = result & 1 != 0;
@@ -507,7 +511,9 @@ impl Emulator {
                     self.f |= FLAG_C;
                     result |= 0x80;
                 }
-                self.check_zero(result);
+                if set_zero {
+                    self.check_zero(result);
+                }
             }
             Unary::Rl => {
                 let carry = self.flag(FLAG_C_BIT);
@@ -520,7 +526,9 @@ impl Emulator {
                 if carry {
                     result |= 1;
                 }
-                self.check_zero(result);
+                if set_zero {
+                    self.check_zero(result);
+                }
             }
             Unary::Rr => {
                 let carry = self.flag(FLAG_C_BIT);
@@ -533,7 +541,9 @@ impl Emulator {
                 if carry {
                     result |= 0x80;
                 }
-                self.check_zero(result);
+                if set_zero {
+                    self.check_zero(result);
+                }
             }
             Unary::Sla => {
                 let msb = result & 0x80 != 0;
@@ -542,7 +552,9 @@ impl Emulator {
                 if msb {
                     self.f |= FLAG_C;
                 }
-                self.check_zero(result);
+                if set_zero {
+                    self.check_zero(result);
+                }
             }
             Unary::Sra => {
                 let lsb = result & 1 != 0;
@@ -555,7 +567,9 @@ impl Emulator {
                 if lsb {
                     self.f |= FLAG_C;
                 }
-                self.check_zero(result);
+                if set_zero {
+                    self.check_zero(result);
+                }
             }
             Unary::Srl => {
                 let lsb = result & 1 != 0;
@@ -564,12 +578,16 @@ impl Emulator {
                 if lsb {
                     self.f |= FLAG_C;
                 }
-                self.check_zero(result);
+                if set_zero {
+                    self.check_zero(result);
+                }
             }
             Unary::Swap => {
                 self.f = 0;
                 result = (result >> 4) | (result << 4);
-                self.check_zero(result);
+                if set_zero {
+                    self.check_zero(result);
+                }
             }
         }
         result
@@ -579,7 +597,7 @@ impl Emulator {
     fn unary_reg(&mut self, reg: Reg8, op: Unary, cycles: u32) {
         self.cycles_this_update += cycles;
         let value = self.get8(reg);
-        let result = self.unary_value(value, op);
+        let result = self.unary_value(value, op, true);
         self.set8(reg, result);
     }
 
@@ -588,8 +606,16 @@ impl Emulator {
         self.cycles_this_update += cycles;
         let address = self.get_hl();
         let value = self.read_memory(address);
-        let result = self.unary_value(value, op);
+        let result = self.unary_value(value, op, true);
         self.write_byte(address, result);
+    }
+
+    #[inline]
+    fn unary_accum(&mut self, op: Unary, cycles: u32) {
+        self.cycles_this_update += cycles;
+        let value = self.a;
+        let result = self.unary_value(value, op, false);
+        self.a = result;
     }
 
     #[inline]
@@ -649,35 +675,37 @@ impl Emulator {
     #[inline]
     fn daa(&mut self) {
         self.cycles_this_update += 4;
-        if self.flag(FLAG_N_BIT) {
-            if self.a & 0x0F > 9 || self.flag(FLAG_H_BIT) {
-                self.a = self.a.wrapping_sub(0x06);
-                if self.a & 0xF0 == 0xF0 {
-                    self.f |= FLAG_C;
-                } else {
-                    self.f &= !FLAG_C;
-                }
-            }
-            if self.a & 0xF0 > 0x90 || self.flag(FLAG_C_BIT) {
-                self.a = self.a.wrapping_sub(0x60);
-            }
-        } else {
-            if self.a & 0x0F > 9 || self.flag(FLAG_H_BIT) {
-                self.a = self.a.wrapping_add(0x06);
-                if self.a & 0xF0 == 0 {
-                    self.f |= FLAG_C;
-                } else {
-                    self.f &= !FLAG_C;
-                }
-            }
-            if self.a & 0xF0 > 0x90 || self.flag(FLAG_C_BIT) {
+        let subtract = self.flag(FLAG_N_BIT);
+        let half_carry = self.flag(FLAG_H_BIT);
+        let carry_in = self.flag(FLAG_C_BIT);
+        let mut carry = false;
+
+        if !subtract {
+            if carry_in || self.a > 0x99 {
                 self.a = self.a.wrapping_add(0x60);
+                carry = true;
             }
+            if half_carry || self.a & 0x0F > 0x09 {
+                self.a = self.a.wrapping_add(0x06);
+            }
+        } else if carry_in {
+            carry = true;
+            self.a = self
+                .a
+                .wrapping_add(if half_carry { 0x9A } else { 0xA0 });
+        } else if half_carry {
+            self.a = self.a.wrapping_add(0xFA);
         }
+
+        self.f = 0;
         if self.a == 0 {
             self.f |= FLAG_Z;
-        } else {
-            self.f &= !FLAG_Z;
+        }
+        if subtract {
+            self.f |= FLAG_N;
+        }
+        if carry {
+            self.f |= FLAG_C;
         }
     }
 
@@ -1262,10 +1290,10 @@ impl Emulator {
             0xCB => self.execute_extended_opcode(),
 
             // accumulator rotates
-            0x07 => self.unary_reg(Reg8::A, Unary::Rlc, 8),
-            0x0F => self.unary_reg(Reg8::A, Unary::Rrc, 8),
-            0x17 => self.unary_reg(Reg8::A, Unary::Rl, 8),
-            0x1F => self.unary_reg(Reg8::A, Unary::Rr, 8),
+            0x07 => self.unary_accum(Unary::Rlc, 8),
+            0x0F => self.unary_accum(Unary::Rrc, 8),
+            0x17 => self.unary_accum(Unary::Rl, 8),
+            0x1F => self.unary_accum(Unary::Rr, 8),
 
             // return from interrupt
             0xD9 => {
@@ -1365,16 +1393,32 @@ impl Emulator {
             }
 
             0xF8 => {
-                let offset = self.immediate_byte() as i8;
-                self.f &= !FLAG_Z;
-                self.f &= !FLAG_N;
-                self.set_hl(self.sp.wrapping_add(offset as u16));
-                // The carry test is retained from the original implementation.
-                self.f &= !FLAG_C;
-                if (self.sp & 0xF) + (offset as u16 & 0xF) > 0xF {
+                // LD HL, SP+e
+                self.cycles_this_update += 12;
+                let offset = self.immediate_byte();
+                let sp = self.sp;
+                self.set_hl(sp.wrapping_add(offset as i8 as u16));
+                self.f = 0;
+                if (sp & 0xF) + (offset & 0xF) as u16 > 0xF {
                     self.f |= FLAG_H;
-                } else {
-                    self.f &= !FLAG_H;
+                }
+                if (sp & 0xFF) as u16 + offset as u16 > 0xFF {
+                    self.f |= FLAG_C;
+                }
+            }
+
+            0xE8 => {
+                // ADD SP, e
+                self.cycles_this_update += 16;
+                let offset = self.immediate_byte();
+                let sp = self.sp;
+                self.sp = sp.wrapping_add(offset as i8 as u16);
+                self.f = 0;
+                if (sp & 0xF) + (offset & 0xF) as u16 > 0xF {
+                    self.f |= FLAG_H;
+                }
+                if (sp & 0xFF) as u16 + offset as u16 > 0xFF {
+                    self.f |= FLAG_C;
                 }
             }
 
@@ -1408,8 +1452,8 @@ impl Emulator {
                     3 => Unary::Rr,
                     4 => Unary::Sla,
                     5 => Unary::Sra,
-                    6 => Unary::Srl,
-                    7 => Unary::Swap,
+                    6 => Unary::Swap,
+                    7 => Unary::Srl,
                     _ => unreachable!(),
                 };
                 if z == 6 {
@@ -1444,5 +1488,57 @@ impl Emulator {
             }
             _ => unreachable!(),
         }
+    }
+}
+
+#[cfg(test)]
+mod daa_tests {
+    use super::*;
+    use crate::Emulator;
+
+    fn update_crc(bytes: &mut [u8; 4], value: u8) {
+        let mut b = bytes[3];
+        let mut c = bytes[2];
+        let mut d = bytes[1];
+        let mut a = bytes[0] ^ value;
+        for _ in 0..8 {
+            let mut carry = b & 1;
+            b >>= 1;
+            let next = c & 1;
+            c = (c >> 1) | (carry << 7);
+            carry = next;
+            let next = d & 1;
+            d = (d >> 1) | (carry << 7);
+            carry = next;
+            let next = a & 1;
+            a = (a >> 1) | (carry << 7);
+            carry = next;
+            if carry != 0 {
+                b ^= 0xED;
+                c ^= 0xB8;
+                d ^= 0x83;
+                a ^= 0x20;
+            }
+        }
+        *bytes = [a, d, c, b];
+    }
+
+    #[test]
+    fn daa_matches_blargg_checksum() {
+        let mut emu = Emulator::new();
+        let mut crc = [0xFFu8; 4];
+        for e in (0..=255u8).step_by(0x10) {
+            for d in 0..=255u8 {
+                emu.a = d;
+                emu.f = e;
+                emu.daa();
+                let a = emu.a;
+                let f = emu.f;
+                update_crc(&mut crc, a);
+                update_crc(&mut crc, f);
+            }
+        }
+        let raw = u32::from_be_bytes([crc[3], crc[2], crc[1], crc[0]]);
+        assert_eq!(raw, 0x9560_7275, "raw crc {raw:#010x}");
     }
 }
