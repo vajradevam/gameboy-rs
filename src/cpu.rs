@@ -716,7 +716,6 @@ impl Emulator {
         opcode
     }
 
-    #[inline]
     pub(crate) fn execute_opcode(&mut self, opcode: u8) {
         match opcode {
             0x00 => self.cycles_this_update += 4,
@@ -1388,7 +1387,6 @@ impl Emulator {
         }
     }
 
-    #[inline]
     pub(crate) fn execute_extended_opcode(&mut self) {
         let pc = self.pc;
         let mut opcode = self.rom[pc as usize];

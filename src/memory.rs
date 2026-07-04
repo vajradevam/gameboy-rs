@@ -162,7 +162,6 @@ impl Emulator {
         (high << 8) | low
     }
 
-    #[inline]
     pub(crate) fn reset_screen(&mut self) {
         for row in self.screen.iter_mut() {
             for pixel in row.iter_mut() {
@@ -171,7 +170,6 @@ impl Emulator {
         }
     }
 
-    #[inline]
     pub(crate) fn create_ram_banks(&mut self, _num_banks: usize) {
         // The hardware supports up to 16 switchable banks; bank zero is
         // initialised from the cartridge header area.
@@ -179,7 +177,6 @@ impl Emulator {
         self.ram_banks[0].copy_from_slice(&self.rom[0xA000..0xC000]);
     }
 
-    #[inline]
     pub(crate) fn reset_cpu(&mut self) -> bool {
         self.reset_screen();
         self.current_ram_bank = 0;
