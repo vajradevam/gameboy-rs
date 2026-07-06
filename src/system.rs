@@ -31,20 +31,23 @@ impl Emulator {
     }
 
     pub(crate) fn do_interrupts(&mut self) {
+        let pending = self.rom[0xFF0F] & self.rom[0xFFFF];
+
+        // HALT wakes up when an enabled interrupt is flagged, even when
+        // interrupts are globally disabled; the handler only runs with IME=1.
+        if self.halted && pending != 0 {
+            self.halted = false;
+        }
+
         if !self.enable_interrupts {
             return;
         }
 
-        let request_flag = self.rom[0xFF0F];
-        if request_flag == 0 {
-            return;
-        }
-
-        let enabled = self.rom[0xFFFF];
         for bit in 0..8u8 {
             let mask = 1 << bit;
-            if request_flag & mask != 0 && enabled & mask != 0 {
+            if pending & mask != 0 {
                 self.service_interrupt(bit);
+                break;
             }
         }
     }
