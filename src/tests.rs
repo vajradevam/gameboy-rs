@@ -174,3 +174,85 @@ fn flags_are_publicly_observable() {
     assert!(emu.half_carry_flag());
     assert!(emu.carry_flag());
 }
+
+
+#[test]
+fn pop_af_masks_the_low_nibble_of_f() {
+    let mut emu = with_program(&[0xF1]);
+    emu.sp = 0xFFFC;
+    emu.write_byte(0xFFFC, 0xBF);
+    emu.write_byte(0xFFFD, 0xAB);
+    step(&mut emu);
+    assert_eq!(emu.registers().0 >> 8, 0xAB);
+    assert_eq!(emu.f, FLAG_Z | FLAG_H | FLAG_C);
+}
+
+#[test]
+fn adc_propagates_carry_into_the_result() {
+    let mut emu = with_program(&[0xCE, 0xFF]);
+    emu.a = 0x00;
+    emu.f = FLAG_C;
+    step(&mut emu);
+    assert_eq!(emu.a, 0x00);
+    assert!(emu.carry_flag());
+    assert!(emu.half_carry_flag());
+    assert!(emu.zero_flag());
+}
+
+#[test]
+fn sbc_propagates_borrow_into_the_result() {
+    let mut emu = with_program(&[0xDE, 0x00]);
+    emu.a = 0x00;
+    emu.f = FLAG_C;
+    step(&mut emu);
+    assert_eq!(emu.a, 0xFF);
+    assert!(emu.carry_flag());
+    assert!(emu.half_carry_flag());
+    assert!(emu.subtract_flag());
+}
+
+#[test]
+fn cb_srl_and_swap_decode_to_distinct_ops() {
+    let mut emu = with_program(&[0xCB, 0x38]);
+    emu.b = 0xFF;
+    step(&mut emu);
+    assert_eq!(emu.b, 0x7F);
+    assert!(emu.carry_flag());
+
+    let mut emu = with_program(&[0xCB, 0x37]);
+    emu.a = 0xAB;
+    step(&mut emu);
+    assert_eq!(emu.a, 0xBA);
+}
+
+#[test]
+fn accumulator_rotates_always_clear_zero() {
+    let mut emu = with_program(&[0x07]);
+    emu.a = 0x00;
+    emu.f = FLAG_Z;
+    step(&mut emu);
+    assert_eq!(emu.a, 0x00);
+    assert!(!emu.zero_flag());
+}
+
+#[test]
+fn halt_wakes_with_an_enabled_interrupt_pending() {
+    let mut emu = with_program(&[0x76, 0x00]);
+    emu.rom[0xFF0F] = 1 << 2;
+    emu.rom[0xFFFF] = 1 << 2;
+    step(&mut emu);
+    assert!(emu.halted);
+    emu.do_interrupts();
+    assert!(!emu.halted);
+    assert_eq!(emu.program_counter(), 0x101);
+}
+
+#[test]
+fn add_hl_sets_half_carry_from_bit_eleven() {
+    let mut emu = with_program(&[0x09]);
+    emu.set_hl(0x0FFF);
+    emu.set_bc(0x0001);
+    step(&mut emu);
+    assert_eq!(emu.get_hl(), 0x1000);
+    assert!(emu.half_carry_flag());
+}

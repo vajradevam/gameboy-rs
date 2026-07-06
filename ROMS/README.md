@@ -20,8 +20,13 @@ Run one with:
 cargo run --release -- ROMS/cpu_instrs.gb
 ```
 
-Or headlessly (no window):
+Or headlessly (no window). The headless mode prints anything a test ROM sends
+over the serial link, which is where blargg's suites report their results:
 
 ```sh
-cargo run --release -- --headless ROMS/cpu_instrs.gb 60
+cargo run --release -- --headless ROMS/cpu_instrs.gb 30000
 ```
+
+`cpu_instrs.gb` currently reports `Passed all tests`. The timing suites
+(`instr_timing.gb`, `mem_timing.gb`) still fail because the emulator does not
+model cycle-accurate memory access.
