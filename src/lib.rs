@@ -19,6 +19,9 @@ pub struct Emulator {
     /// RGB framebuffer, indexed as `[y][x][channel]`.
     pub screen: Box<Screen>,
 
+    /// Characters emitted through the serial link, mainly used by test ROMs.
+    pub serial_output: Vec<u8>,
+
     pub(crate) rom: Box<[u8; 0x10000]>,
     pub(crate) game_bank: Box<[u8]>,
     pub(crate) ram_banks: Vec<[u8; 0x2000]>,
@@ -64,6 +67,7 @@ impl Emulator {
     pub fn new() -> Self {
         let mut emulator = Self {
             screen: Box::new([[[255; 3]; SCREEN_WIDTH]; SCREEN_HEIGHT]),
+            serial_output: Vec::new(),
             rom: Box::new([0; 0x10000]),
             game_bank: vec![0; 0x200000].into_boxed_slice(),
             ram_banks: Vec::new(),

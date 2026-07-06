@@ -90,6 +90,16 @@ impl Emulator {
                 self.rom[(address - 0x2000) as usize] = data;
             }
             0xFEA0..=0xFEFF => {}
+            0xFF02 => {
+                // A test ROM starting a serial transfer: capture the byte and
+                // clear the busy flag so its polling loop can continue.
+                if data & 0x80 != 0 {
+                    self.serial_output.push(self.rom[0xFF01]);
+                    self.rom[0xFF02] = data & 0x7F;
+                } else {
+                    self.rom[0xFF02] = data;
+                }
+            }
             0xFF04 => {
                 self.rom[0xFF04] = 0;
                 self.divider_variable = 0;

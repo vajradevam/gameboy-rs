@@ -117,6 +117,14 @@ fn main() {
             emulator.program_counter(),
             checksum
         );
+        if !emulator.serial_output.is_empty() {
+            let text: String = emulator
+                .serial_output
+                .iter()
+                .map(|&b| b as char)
+                .collect();
+            println!("--- serial output ---\n{}", text);
+        }
         return;
     }
 
