@@ -17,6 +17,7 @@ impl Emulator {
                 self.ram_banks[self.current_ram_bank][index]
             }
             0xFF00 => self.get_joypad_state(),
+            0xFF0F => self.rom[0xFF0F] | 0xE0,
             _ => self.rom[address as usize],
         }
     }
@@ -194,6 +195,7 @@ impl Emulator {
         self.current_clock_speed = 1024;
         self.divider_variable = 0;
         self.halted = false;
+        self.halt_bug = false;
         self.total_opcodes = 0;
         self.joypad_state = 0xFF;
         self.cycles_this_update = 0;

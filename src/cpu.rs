@@ -721,6 +721,12 @@ impl Emulator {
 
         if !self.halted {
             self.pc = self.pc.wrapping_add(1);
+            // HALT with a pending interrupt and IME=0 re-executes the byte
+            // following the HALT instruction instead of advancing past it.
+            if self.halt_bug {
+                self.pc = self.pc.wrapping_sub(1);
+                self.halt_bug = false;
+            }
             self.total_opcodes += 1;
             self.execute_opcode(opcode);
         } else {
@@ -1371,7 +1377,15 @@ impl Emulator {
 
             0x76 => {
                 self.cycles_this_update += 4;
-                self.halted = true;
+                if self.rom[0xFF0F] & self.rom[0xFFFF] & 0x1F != 0 {
+                    if self.enable_interrupts {
+                        self.pc = self.pc.wrapping_sub(1);
+                    } else {
+                        self.halt_bug = true;
+                    }
+                } else {
+                    self.halted = true;
+                }
             }
 
             0x3F => {

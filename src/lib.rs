@@ -52,6 +52,7 @@ pub struct Emulator {
     pub(crate) pending_interrupt_disabled: bool,
     pub(crate) pending_interrupt_enabled: bool,
     pub(crate) halted: bool,
+    pub(crate) halt_bug: bool,
 
     pub(crate) retrace_ly: i32,
     pub(crate) joypad_state: u8,
@@ -93,6 +94,7 @@ impl Emulator {
             pending_interrupt_disabled: false,
             pending_interrupt_enabled: false,
             halted: false,
+            halt_bug: false,
             retrace_ly: constants::RETRACE_START,
             joypad_state: 0,
             game_loaded: false,
