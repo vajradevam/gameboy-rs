@@ -125,6 +125,17 @@ fn main() {
                 .collect();
             println!("--- serial output ---\n{}", text);
         }
+        if let Some(path) = std::env::var_os("GB_FRAME_DUMP") {
+            use std::io::Write;
+            let mut ppm = Vec::with_capacity(gameboy::WIDTH * gameboy::HEIGHT * 3 + 32);
+            write!(ppm, "P6\n{} {}\n255\n", gameboy::WIDTH, gameboy::HEIGHT).unwrap();
+            for row in emulator.screen().iter() {
+                for pixel in row.iter() {
+                    ppm.extend_from_slice(pixel);
+                }
+            }
+            std::fs::write(path, ppm).unwrap();
+        }
         return;
     }
 
