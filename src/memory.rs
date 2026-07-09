@@ -103,21 +103,12 @@ impl Emulator {
             }
             0xFF04 => {
                 self.rom[0xFF04] = 0;
-                self.divider_variable = 0;
+                self.div_counter = 0;
             }
             0xFF07 => {
+                // Changing TAC does not reset the divider phase; TIMA keeps
+                // stepping on the falling edge of the newly selected bit.
                 self.rom[address as usize] = data;
-                let clock_speed = match data & 0x03 {
-                    0 => 1024,
-                    1 => 16,
-                    2 => 64,
-                    3 => 256,
-                    _ => unreachable!(),
-                };
-                if clock_speed != self.current_clock_speed {
-                    self.timer_variable = 0;
-                    self.current_clock_speed = clock_speed;
-                }
             }
             0xFF44 => {
                 self.rom[0xFF44] = 0;
@@ -191,9 +182,7 @@ impl Emulator {
     pub(crate) fn reset_cpu(&mut self) -> bool {
         self.reset_screen();
         self.current_ram_bank = 0;
-        self.timer_variable = 0;
-        self.current_clock_speed = 1024;
-        self.divider_variable = 0;
+        self.div_counter = 0;
         self.halted = false;
         self.halt_bug = false;
         self.total_opcodes = 0;

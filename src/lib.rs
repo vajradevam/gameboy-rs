@@ -58,9 +58,9 @@ pub struct Emulator {
     pub(crate) joypad_state: u8,
     pub(crate) game_loaded: bool,
 
-    pub(crate) timer_variable: u32,
-    pub(crate) divider_variable: u32,
-    pub(crate) current_clock_speed: u32,
+    /// Free-running divider clock in T-cycles (4.19 MHz). TIMA advances on the
+    /// falling edge of one of its bits, selected by TAC.
+    pub(crate) div_counter: u64,
     pub(crate) debug_value: u8,
 }
 
@@ -98,9 +98,7 @@ impl Emulator {
             retrace_ly: constants::RETRACE_START,
             joypad_state: 0,
             game_loaded: false,
-            timer_variable: 0,
-            divider_variable: 0,
-            current_clock_speed: 1024,
+            div_counter: 0,
             debug_value: 0,
         };
         emulator.reset_screen();

@@ -7,26 +7,33 @@ impl Emulator {
     #[inline]
     pub(crate) fn do_input(&mut self) {}
 
-    pub(crate) fn do_timers(&mut self, cycles: u32) {
-        let timer_attributes = self.rom[0xFF07];
-        self.divider_variable += cycles;
+    /// TIMA increments on the falling edge of a divider bit. The trigger bit
+    /// depends on the TAC frequency select: 512, 8, 32 or 128 T-cycles.
+    const TIMA_TRIGGER_BITS: [u64; 4] = [512, 8, 32, 128];
 
-        if timer_attributes & 0x04 != 0 {
-            self.timer_variable += cycles;
-            if self.timer_variable >= self.current_clock_speed {
-                self.timer_variable = 0;
+    pub(crate) fn do_timers(&mut self, cycles: u32) {
+        let old = self.div_counter;
+        let new = old.wrapping_add(cycles as u64);
+        self.div_counter = new;
+
+        // The visible DIV register is the high byte of the 16-bit divider.
+        self.rom[0xFF04] = (new >> 8) as u8;
+
+        let tac = self.rom[0xFF07];
+        if tac & 0x04 != 0 {
+            let period = 2 * Self::TIMA_TRIGGER_BITS[(tac & 0x03) as usize];
+            let edges = (new / period).wrapping_sub(old / period);
+            for _ in 0..edges {
                 let overflow = self.rom[0xFF05] == 0xFF;
-                self.rom[0xFF05] = self.rom[0xFF05].wrapping_add(1);
+                self.rom[0xFF05] = if overflow {
+                    self.rom[0xFF06]
+                } else {
+                    self.rom[0xFF05].wrapping_add(1)
+                };
                 if overflow {
-                    self.rom[0xFF05] = self.rom[0xFF06];
                     self.request_interrupt(2);
                 }
             }
-        }
-
-        if self.divider_variable >= 256 {
-            self.divider_variable = 0;
-            self.rom[0xFF04] = self.rom[0xFF04].wrapping_add(1);
         }
     }
 
