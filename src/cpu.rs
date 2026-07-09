@@ -431,7 +431,7 @@ impl Emulator {
 
     #[inline]
     fn jump_absolute(&mut self) {
-        self.cycles_this_update += 12;
+        self.cycles_this_update += 16;
         let target = self.read_word();
         self.pc = self.pc.wrapping_add(2);
         self.pc = target;
@@ -439,43 +439,48 @@ impl Emulator {
 
     #[inline]
     fn jump_conditional(&mut self, bit: u8, condition: bool) {
-        self.cycles_this_update += 12;
         let target = self.read_word();
         self.pc = self.pc.wrapping_add(2);
         if self.flag(bit) == condition {
+            self.cycles_this_update += 16;
             self.pc = target;
+        } else {
+            self.cycles_this_update += 12;
         }
     }
 
     #[inline]
     fn jump_relative(&mut self, bit: Option<u8>, condition: bool) {
-        self.cycles_this_update += 8;
         let offset = self.read_memory(self.pc) as i8 as u16;
-        match bit {
-            None => self.pc = self.pc.wrapping_add(offset),
-            Some(b) if self.flag(b) == condition => self.pc = self.pc.wrapping_add(offset),
-            _ => {}
+        let taken = bit.map_or(true, |b| self.flag(b) == condition);
+        self.cycles_this_update += if taken { 12 } else { 8 };
+        if taken {
+            self.pc = self.pc.wrapping_add(offset);
         }
         self.pc = self.pc.wrapping_add(1);
     }
 
     #[inline]
     fn call(&mut self, bit: Option<u8>, condition: bool) {
-        self.cycles_this_update += 12;
         let target = self.read_word();
         self.pc = self.pc.wrapping_add(2);
         if bit.map_or(true, |b| self.flag(b) == condition) {
             let address = self.pc;
             self.push_word_onto_stack(address);
             self.pc = target;
+            self.cycles_this_update += 24;
+        } else {
+            self.cycles_this_update += 12;
         }
     }
 
     #[inline]
     fn ret(&mut self, bit: Option<u8>, condition: bool) {
-        self.cycles_this_update += 8;
         if bit.map_or(true, |b| self.flag(b) == condition) {
             self.pc = self.pop_word_off_stack();
+            self.cycles_this_update += if bit.is_none() { 16 } else { 20 };
+        } else {
+            self.cycles_this_update += 8;
         }
     }
 
@@ -483,7 +488,7 @@ impl Emulator {
     fn restart(&mut self, target: u8) {
         let address = self.pc;
         self.push_word_onto_stack(address);
-        self.cycles_this_update += 32;
+        self.cycles_this_update += 16;
         self.pc = target as u16;
     }
 
@@ -639,7 +644,7 @@ impl Emulator {
     #[inline]
     fn test_bit_hl(&mut self, bit: u8) {
         let value = self.read_memory(self.get_hl());
-        self.test_bit_value(value, bit, 16);
+        self.test_bit_value(value, bit, 12);
     }
 
     #[inline]
@@ -873,12 +878,10 @@ impl Emulator {
             0x32 => {
                 self.store_hl(Reg8::A);
                 self.dec16(Reg16::Hl, 0);
-                self.cycles_this_update += 8;
             }
             0x22 => {
                 self.store_hl(Reg8::A);
                 self.inc16(Reg16::Hl, 0);
-                self.cycles_this_update += 8;
             }
 
             // 16-bit loads
@@ -1296,16 +1299,16 @@ impl Emulator {
             0xCB => self.execute_extended_opcode(),
 
             // accumulator rotates
-            0x07 => self.unary_accum(Unary::Rlc, 8),
-            0x0F => self.unary_accum(Unary::Rrc, 8),
-            0x17 => self.unary_accum(Unary::Rl, 8),
-            0x1F => self.unary_accum(Unary::Rr, 8),
+            0x07 => self.unary_accum(Unary::Rlc, 4),
+            0x0F => self.unary_accum(Unary::Rrc, 4),
+            0x17 => self.unary_accum(Unary::Rl, 4),
+            0x1F => self.unary_accum(Unary::Rr, 4),
 
             // return from interrupt
             0xD9 => {
                 self.pc = self.pop_word_off_stack();
                 self.enable_interrupts = true;
-                self.cycles_this_update += 8;
+                self.cycles_this_update += 16;
             }
 
             // load SP into little-endian address nn
@@ -1471,10 +1474,7 @@ impl Emulator {
                     _ => unreachable!(),
                 };
                 if z == 6 {
-                    // SRL on memory uses the same cycle count as its register
-                    // form in the original implementation.
-                    let cycles = if matches!(op, Unary::Srl) { 8 } else { 16 };
-                    self.unary_hl(op, cycles);
+                    self.unary_hl(op, 16);
                 } else {
                     self.unary_reg(Self::reg_from_z(z), op, 8);
                 }
