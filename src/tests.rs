@@ -236,15 +236,34 @@ fn accumulator_rotates_always_clear_zero() {
 }
 
 #[test]
-fn halt_wakes_with_an_enabled_interrupt_pending() {
+fn halt_wakes_when_an_interrupt_arrives() {
     let mut emu = with_program(&[0x76, 0x00]);
-    emu.rom[0xFF0F] = 1 << 2;
-    emu.rom[0xFFFF] = 1 << 2;
     step(&mut emu);
     assert!(emu.halted);
+    emu.rom[0xFF0F] = 1 << 2;
+    emu.rom[0xFFFF] = 1 << 2;
     emu.do_interrupts();
     assert!(!emu.halted);
     assert_eq!(emu.program_counter(), 0x101);
+}
+
+#[test]
+fn halt_bug_reexecutes_the_following_byte() {
+    let mut emu = with_program(&[0x76, 0x11, 0x04, 0x0C]);
+    emu.rom[0xFFFF] = 0x11;
+    emu.rom[0xFF0F] = 0x10;
+    step(&mut emu);
+    assert!(!emu.halted);
+    assert!(emu.halt_bug);
+    step(&mut emu);
+    assert!(!emu.halt_bug);
+    assert_eq!(emu.get_de(), 0x0411);
+}
+
+#[test]
+fn if_register_reads_with_upper_bits_set() {
+    let emu = with_program(&[]);
+    assert_eq!(emu.read_memory(0xFF0F), 0xE0);
 }
 
 #[test]
