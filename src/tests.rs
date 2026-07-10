@@ -74,12 +74,62 @@ fn absolute_and_relative_jumps() {
     let mut emu = with_program(&[0xC3, 0x50, 0x00]);
     step(&mut emu);
     assert_eq!(emu.program_counter(), 0x50);
-    assert_eq!(emu.cycles_this_update, 12);
+    assert_eq!(emu.cycles_this_update, 16);
 
     let mut emu = with_program(&[0x18, 0xFE]);
     step(&mut emu);
     assert_eq!(emu.program_counter(), 0x100);
+    assert_eq!(emu.cycles_this_update, 12);
+}
+
+#[test]
+fn control_flow_cycle_counts() {
+    // CALL is 24 cycles, unconditional RET is 16.
+    let mut emu = with_program(&[0xCD, 0x10, 0x01]);
+    emu.rom[0x110] = 0xC9;
+    step(&mut emu);
+    assert_eq!(emu.cycles_this_update, 24);
+    emu.cycles_this_update = 0;
+    step(&mut emu);
+    assert_eq!(emu.cycles_this_update, 16);
+
+    // Conditional RET taken is 20, not taken is 8.
+    let mut emu = with_program(&[0xC0]);
+    emu.f = FLAG_Z;
+    step(&mut emu);
     assert_eq!(emu.cycles_this_update, 8);
+    let mut emu = with_program(&[0xC0]);
+    step(&mut emu);
+    assert_eq!(emu.cycles_this_update, 20);
+
+    // RST is 16 cycles.
+    let mut emu = with_program(&[0xC7]);
+    step(&mut emu);
+    assert_eq!(emu.cycles_this_update, 16);
+}
+
+#[test]
+fn memory_and_cb_cycle_counts() {
+    // LD (HL+),A and LD (HL-),A are 8 cycles.
+    let mut emu = with_program(&[0x22]);
+    step(&mut emu);
+    assert_eq!(emu.cycles_this_update, 8);
+    let mut emu = with_program(&[0x32]);
+    step(&mut emu);
+    assert_eq!(emu.cycles_this_update, 8);
+
+    // SRL (HL) is 16 cycles, BIT (HL) is 12.
+    let mut emu = with_program(&[0xCB, 0x3E]);
+    step(&mut emu);
+    assert_eq!(emu.cycles_this_update, 16);
+    let mut emu = with_program(&[0xCB, 0x46]);
+    step(&mut emu);
+    assert_eq!(emu.cycles_this_update, 12);
+
+    // Accumulator rotates are 4 cycles.
+    let mut emu = with_program(&[0x07]);
+    step(&mut emu);
+    assert_eq!(emu.cycles_this_update, 4);
 }
 
 #[test]

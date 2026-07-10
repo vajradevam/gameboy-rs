@@ -27,9 +27,9 @@ over the serial link, which is where blargg's suites report their results:
 cargo run --release -- --headless ROMS/cpu_instrs.gb 30000
 ```
 
-`cpu_instrs.gb` reports `Passed all tests` and `halt_bug.gb` reports `Passed`.
-The timing suites (`instr_timing.gb`, `mem_timing.gb`) still fail because the
-emulator does not model cycle-accurate memory access.
+`cpu_instrs.gb`, `instr_timing.gb` and `halt_bug.gb` all report `Passed`. The
+`mem_timing.gb` suite still fails because the emulator does not model
+cycle-accurate memory access (instruction-level timing is accurate).
 
 Some ROMs only print results on screen. Set `GB_FRAME_DUMP` to a path in
 headless mode to write the final framebuffer as a PPM image:
