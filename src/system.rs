@@ -11,7 +11,8 @@ impl Emulator {
     /// depends on the TAC frequency select: 512, 8, 32 or 128 T-cycles.
     const TIMA_TRIGGER_BITS: [u64; 4] = [512, 8, 32, 128];
 
-    pub(crate) fn do_timers(&mut self, cycles: u32) {
+    #[inline]
+    fn advance_divider(&mut self, cycles: u32) {
         let old = self.div_counter;
         let new = old.wrapping_add(cycles as u64);
         self.div_counter = new;
@@ -35,6 +36,19 @@ impl Emulator {
                 }
             }
         }
+    }
+
+    pub(crate) fn do_timers(&mut self, cycles: u32) {
+        self.advance_divider(cycles);
+    }
+
+    /// Move the timer forward to a memory access happening partway through an
+    /// instruction. The cycles are recorded so `update` does not apply them
+    /// twice when it advances the timer for the whole instruction.
+    #[inline]
+    pub(crate) fn advance_timer_to_access(&mut self, cycles: u32) {
+        self.timer_pre_advanced += cycles;
+        self.advance_divider(cycles);
     }
 
     pub(crate) fn do_interrupts(&mut self) {

@@ -183,6 +183,7 @@ impl Emulator {
         self.reset_screen();
         self.current_ram_bank = 0;
         self.div_counter = 0;
+        self.timer_pre_advanced = 0;
         self.halted = false;
         self.halt_bug = false;
         self.total_opcodes = 0;

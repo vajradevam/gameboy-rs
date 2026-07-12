@@ -358,6 +358,7 @@ impl Emulator {
         let address = self.get_hl();
         let before = self.read_memory(address);
         let after = before.wrapping_add(1);
+        self.advance_timer_to_access(4);
         self.write_byte(address, after);
 
         if after == 0 {
@@ -379,6 +380,7 @@ impl Emulator {
         let address = self.get_hl();
         let before = self.read_memory(address);
         let after = before.wrapping_sub(1);
+        self.advance_timer_to_access(4);
         self.write_byte(address, after);
 
         if after == 0 {
@@ -610,8 +612,10 @@ impl Emulator {
     fn unary_hl(&mut self, op: Unary, cycles: u32) {
         self.cycles_this_update += cycles;
         let address = self.get_hl();
+        self.advance_timer_to_access(4);
         let value = self.read_memory(address);
         let result = self.unary_value(value, op, true);
+        self.advance_timer_to_access(4);
         self.write_byte(address, result);
     }
 
@@ -643,6 +647,7 @@ impl Emulator {
 
     #[inline]
     fn test_bit_hl(&mut self, bit: u8) {
+        self.advance_timer_to_access(4);
         let value = self.read_memory(self.get_hl());
         self.test_bit_value(value, bit, 12);
     }
@@ -657,7 +662,9 @@ impl Emulator {
     #[inline]
     fn reset_bit_hl(&mut self, bit: u8) {
         let address = self.get_hl();
+        self.advance_timer_to_access(4);
         let value = self.read_memory(address) & !(1 << bit);
+        self.advance_timer_to_access(4);
         self.write_byte(address, value);
         self.cycles_this_update += 16;
     }
@@ -672,7 +679,9 @@ impl Emulator {
     #[inline]
     fn set_bit_hl(&mut self, bit: u8) {
         let address = self.get_hl();
+        self.advance_timer_to_access(4);
         let value = self.read_memory(address) | (1 << bit);
+        self.advance_timer_to_access(4);
         self.write_byte(address, value);
         self.cycles_this_update += 16;
     }
@@ -1325,6 +1334,7 @@ impl Emulator {
             0x36 => {
                 self.cycles_this_update += 12;
                 let value = self.immediate_byte();
+                self.advance_timer_to_access(4);
                 self.write_byte(self.get_hl(), value);
             }
 
@@ -1333,6 +1343,7 @@ impl Emulator {
                 self.cycles_this_update += 16;
                 let address = self.read_word();
                 self.pc = self.pc.wrapping_add(2);
+                self.advance_timer_to_access(8);
                 self.a = self.read_memory(address);
             }
 
@@ -1346,6 +1357,7 @@ impl Emulator {
                 self.cycles_this_update += 16;
                 let address = self.read_word();
                 self.pc = self.pc.wrapping_add(2);
+                self.advance_timer_to_access(8);
                 self.write_byte(address, self.a);
             }
 
@@ -1361,12 +1373,14 @@ impl Emulator {
             0xE0 => {
                 let offset = self.immediate_byte();
                 let address = 0xFF00 + offset as u16;
+                self.advance_timer_to_access(4);
                 self.write_byte(address, self.a);
                 self.cycles_this_update += 12;
             }
             0xF0 => {
                 let offset = self.immediate_byte();
                 let address = 0xFF00 + offset as u16;
+                self.advance_timer_to_access(4);
                 self.a = self.read_memory(address);
                 self.cycles_this_update += 12;
             }

@@ -61,6 +61,8 @@ pub struct Emulator {
     /// Free-running divider clock in T-cycles (4.19 MHz). TIMA advances on the
     /// falling edge of one of its bits, selected by TAC.
     pub(crate) div_counter: u64,
+    /// T-cycles already applied to the timer partway through an instruction.
+    pub(crate) timer_pre_advanced: u32,
     pub(crate) debug_value: u8,
 }
 
@@ -99,6 +101,7 @@ impl Emulator {
             joypad_state: 0,
             game_loaded: false,
             div_counter: 0,
+            timer_pre_advanced: 0,
             debug_value: 0,
         };
         emulator.reset_screen();
@@ -147,7 +150,8 @@ impl Emulator {
             self.execute_next_opcode();
             let cycles = self.cycles_this_update - before;
 
-            self.do_timers(cycles);
+            self.do_timers(cycles - self.timer_pre_advanced);
+            self.timer_pre_advanced = 0;
             self.do_graphics(cycles);
             self.do_input();
             self.do_interrupts();
